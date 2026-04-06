@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package indexservice;
+
+option go_package = "distributed-logs/proto/indexservice;indexservice";
+
+// Index service for tracking file offsets and receiving log batches.
+service IndexService {
+  // Returns the current saved offset for a given machine + file.
+  rpc GetOffset(GetOffsetRequest) returns (GetOffsetResponse);
+
+  // Pushes newly read log lines for a file range [start_offset, end_offset).
+  rpc PushLogs(PushLogsRequest) returns (PushLogsResponse);
+}
+
+// ---------- GetOffset ----------
+
+message GetOffsetRequest {
+  string machine_id = 1;
+  string file_path = 2;
+}
+
+message GetOffsetResponse {
+  Status status = 1;
+  int64 offset = 2;
+  string message = 3; // optional human-readable info
+}
+
+// ---------- PushLogs ----------
+
+message PushLogsRequest {
+  string machine_id = 1;
+  string file_path = 2;
+  int64 start_offset = 3;
+  int64 end_offset = 4;
+  repeated string log_lines = 5;
+}
+
+message PushLogsResponse {
+  Status status = 1;
+  string message = 2; // optional human-readable info
+}
+
+// ---------- Common ----------
+
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_OK = 1;
+  STATUS_ERROR = 2;
+}
