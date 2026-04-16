@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: index-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: index-service
+  template:
+    metadata:
+      labels:
+        app: index-service
+    spec:
+      containers:
+        - name: index-service
+          image: index-service:latest   # replace with your registry image
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: database_url
+          ports:
+            - containerPort: 50051
+          readinessProbe:
+            grpc:
+              port: 50051
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            grpc:
+              port: 50051
+            initialDelaySeconds: 15
+            periodSeconds: 20

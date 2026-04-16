@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: index-service
+spec:
+  selector:
+    app: index-service
+  ports:
+    - name: grpc
+      port: 50051
+      targetPort: 50051
+  type: ClusterIP   # use LoadBalancer if external access is needed

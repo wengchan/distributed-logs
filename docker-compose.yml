@@ -1,0 +1,72 @@
+services:
+
+  # ── Primary Postgres ──────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: logs
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d   # runs SQL files on first start
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d logs"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── Postgres read-replica (streaming replication) ─────────────────────────
+  postgres-replica:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: logs
+      PGUSER: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      bash -c "
+        until pg_basebackup -h postgres -U postgres -D /var/lib/postgresql/data -Fp -Xs -R -P; do
+          echo 'waiting for primary...' && sleep 2;
+        done &&
+        postgres
+      "
+    volumes:
+      - pgreplicadata:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+
+  # ── Index Service ─────────────────────────────────────────────────────────
+  index-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/logs?sslmode=disable
+    ports:
+      - "50051:50051"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── Log Client (tails ./testlogs) ─────────────────────────────────────────
+  log-client:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    environment:
+      SERVER_ADDR: index-service:50051
+    volumes:
+      - ./testlogs:/logs:ro
+    depends_on:
+      - index-service
+    command: ["-server", "index-service:50051", "-path", "/logs", "-interval", "10s"]
+
+volumes:
+  pgdata:
+  pgreplicadata:

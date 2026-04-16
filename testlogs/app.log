@@ -1,2 +1,17 @@
 first line
 second line
+echo "2026-04-16 10:00:00 INFO hello from terminal" >> testlogs/app.log
+echo "2026-04-16 10:00:00 INFO hello from terminal" >> testlogs/app.log
+echo "2026-04-16 10:00:00 INFO hello from terminal" >> testlogs/app.log
+echo "2026-04-16 10:00:00 INFO hello from terminal" >> testlogs/app.log
+echo "2026-04-16 10:00:00 INFO hello from terminal" >> testlogs/app.log
+echo "2026-04-16 10:00:00 INFO hello from terminal" >> testlogs/app.log
+echo "2026-04-16 10:00:00 INFO hello from terminal" >> testlogs/app.log
+echo "2026-04-16 10:00:00 INFO hello from terminal" >> testlogs/app.log
+echo "2026-04-16 10:00:00 INFO hello from terminal" >> testlogs/app.log
+echo "2026-04-16 10:00:00 INFO hello from terminal" >> testlogs/app.log
+echo "2026-04-16 10:00:00 INFO hello from terminal" >> testlogs/app.log
+echo "2026-04-16 10:00:00 INFO hello from terminal" >> testlogs/app.log
+echo "2026-04-16 10:00:00 INFO hello from terminal" >> testlogs/app.log
+echo "2026-04-16 10:00:00 INFO hello from terminal" >> testlogs/app.log
+echo "2026-04-16 10:00:00 INFO hello from terminal" >> testlogs/app.log2026-04-16 10:00:00 ERROR database connection failed
