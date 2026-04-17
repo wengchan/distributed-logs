@@ -1,6 +1,6 @@
 # Distributed Logs
 
-A distributed log collection and query system built in Go. Log clients tail files on remote machines, push new lines to a central index service over gRPC, and a REST query service lets you search, count, and AI-summarize stored logs using Claude.
+A distributed log collection and query system built in Go. Log clients tail files on remote machines, push new lines to a central index service over gRPC, and a REST query service lets you search, count, and AI-summarize stored logs.
 
 ## Architecture
 
