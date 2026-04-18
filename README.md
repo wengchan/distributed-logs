@@ -1,6 +1,6 @@
 # Distributed Logs
 
-A distributed log collection and query system built in Go. Log clients tail files on remote machines, push new lines to a central index service over gRPC, and a REST query service lets you search, count, and AI-summarize stored logs.
+Distributed Logs is a distributed log collection and query platform built in Go that helps engineering teams centralize logs from remote machines, investigate incidents faster, and scale log analytics more efficiently. By combining gRPC-based ingestion, fast REST querying, and AI-powered summarization, the system improves observability, reduces manual debugging effort, and supports cost-effective operations in distributed environments.
 
 ## Architecture
 
