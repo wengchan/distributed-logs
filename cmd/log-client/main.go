@@ -2,10 +2,14 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -17,10 +21,11 @@ import (
 )
 
 func main() {
-	serverAddr := flag.String("server", "localhost:50051", "gRPC server address")
-	machineID := flag.String("machine_id", "machine-001", "machine id")
-	dirPath := flag.String("path", ".", "directory containing log files")
-	interval := flag.Duration("interval", 10*time.Second, "scan interval")
+	serverAddr   := flag.String("server", "localhost:50051", "gRPC server address")
+	machineID    := flag.String("machine_id", "machine-001", "machine id")
+	dirPath      := flag.String("path", ".", "directory containing log files")
+	interval     := flag.Duration("interval", 10*time.Second, "scan interval")
+	summarizeAddr := flag.String("summarize-addr", "", "summarize-service address e.g. localhost:8081 (optional)")
 	flag.Parse()
 
 	conn, err := grpc.NewClient(
@@ -34,20 +39,20 @@ func main() {
 
 	client := pb.NewIndexServiceClient(conn)
 
-	log.Printf("log-client started: server=%s machine_id=%s path=%s interval=%s",
-		*serverAddr, *machineID, *dirPath, *interval)
+	log.Printf("log-client started: server=%s machine_id=%s path=%s interval=%s summarize=%s",
+		*serverAddr, *machineID, *dirPath, *interval, *summarizeAddr)
 
-	scanAndProcess(client, *machineID, *dirPath)
+	scanAndProcess(client, *machineID, *dirPath, *summarizeAddr)
 
 	ticker := time.NewTicker(*interval)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		scanAndProcess(client, *machineID, *dirPath)
+		scanAndProcess(client, *machineID, *dirPath, *summarizeAddr)
 	}
 }
 
-func scanAndProcess(client pb.IndexServiceClient, machineID, dirPath string) {
+func scanAndProcess(client pb.IndexServiceClient, machineID, dirPath, summarizeAddr string) {
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
 		log.Printf("failed to read dir %s: %v", dirPath, err)
@@ -58,13 +63,12 @@ func scanAndProcess(client pb.IndexServiceClient, machineID, dirPath string) {
 		if entry.IsDir() {
 			continue
 		}
-
 		fullPath := filepath.Join(dirPath, entry.Name())
-		processFile(client, machineID, fullPath)
+		processFile(client, machineID, fullPath, summarizeAddr)
 	}
 }
 
-func processFile(client pb.IndexServiceClient, machineID, filePath string) {
+func processFile(client pb.IndexServiceClient, machineID, filePath, summarizeAddr string) {
 	ctx1, cancel1 := context.WithTimeout(context.Background(), 3*time.Second)
 	getResp, err := client.GetOffset(ctx1, &pb.GetOffsetRequest{
 		MachineId: machineID,
@@ -132,4 +136,58 @@ func processFile(client pb.IndexServiceClient, machineID, filePath string) {
 
 	log.Printf("PushLogs success: file=%s status=%v message=%s",
 		filePath, pushResp.GetStatus(), pushResp.GetMessage())
+
+	// Optionally call the summarize service in the background.
+	if summarizeAddr != "" {
+		go requestSummary(summarizeAddr, machineID, filePath, logLines)
+	}
+}
+
+// requestSummary posts log lines to the summarize service and logs the result.
+// Runs in a goroutine so it never blocks the main push loop.
+func requestSummary(addr, machineID, filePath string, logLines []string) {
+	body, err := json.Marshal(map[string]any{
+		"machine_id": machineID,
+		"file_path":  filePath,
+		"log_lines":  logLines,
+	})
+	if err != nil {
+		log.Printf("summarize marshal error: %v", err)
+		return
+	}
+
+	url := fmt.Sprintf("http://%s/summarize", addr)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		log.Printf("summarize request error: %v", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Printf("summarize call failed: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Summary  string `json:"summary"`
+		LogCount int    `json:"log_count"`
+		Error    string `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Printf("summarize decode error: %v", err)
+		return
+	}
+	if result.Error != "" {
+		log.Printf("summarize error: %s", result.Error)
+		return
+	}
+
+	log.Printf("=== SUMMARY [%s] %d lines ===\n%s\n=== END SUMMARY ===",
+		filePath, result.LogCount, result.Summary)
 }

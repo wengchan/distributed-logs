@@ -54,6 +54,12 @@ run-server:
 run-client:
 	go run ./cmd/log-client -path ./testlogs -interval 5s
 
+run-client-summarize:
+	go run ./cmd/log-client -path ./testlogs -interval 5s -summarize-addr localhost:8081
+
+run-summarize:
+	ANTHROPIC_API_KEY="$(ANTHROPIC_API_KEY)" go run ./cmd/summarize-service
+
 run-query:
 	DATABASE_URL="$(DB_URL)" ANTHROPIC_API_KEY="$(ANTHROPIC_API_KEY)" go run ./cmd/query-service
 
@@ -61,9 +67,10 @@ run-query:
 
 build:
 	mkdir -p bin
-	go build -o bin/index-service ./cmd/index-service
-	go build -o bin/log-client    ./cmd/log-client
-	go build -o bin/query-service ./cmd/query-service
+	go build -o bin/index-service    ./cmd/index-service
+	go build -o bin/log-client       ./cmd/log-client
+	go build -o bin/query-service    ./cmd/query-service
+	go build -o bin/summarize-service ./cmd/summarize-service
 
 clean:
 	rm -rf bin/

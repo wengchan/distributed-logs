@@ -13,6 +13,10 @@ spec:
       labels:
         app: postgres
     spec:
+      volumes:
+        - name: migrations
+          configMap:
+            name: postgres-migrations
       containers:
         - name: postgres
           image: postgres:16
@@ -46,17 +50,13 @@ spec:
         resources:
           requests:
             storage: 10Gi
-  volumes:
-    - name: migrations
-      configMap:
-        name: postgres-migrations
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: postgres
 spec:
-  clusterIP: None   # headless — lets StatefulSet pods resolve by DNS
+  clusterIP: None
   selector:
     app: postgres
   ports:
