@@ -1,0 +1,9 @@
+# Non-secret runtime config shared across services.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: distributed-logs
+data:
+  AWS_REGION: ${AWS_REGION}
+  LOG_ARCHIVE_BUCKET: ${LOG_ARCHIVE_BUCKET}

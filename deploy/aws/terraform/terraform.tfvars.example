@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+aws_region   = "us-west-2"
+cluster_name = "distributed-logs"
+
+# Postgres master password (min 8 chars, no '/', '@', '"', or spaces)
+db_password = "CHANGE_ME_strong_password"
+
+# Anthropic API key used by query-service + summarize-service
+anthropic_api_key = "sk-ant-..."

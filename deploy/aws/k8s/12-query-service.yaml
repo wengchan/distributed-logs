@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: query-service
+  namespace: distributed-logs
+  labels: { app: query-service }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: query-service }
+  template:
+    metadata:
+      labels: { app: query-service }
+    spec:
+      containers:
+        - name: query-service
+          image: ${ECR_REGISTRY}/distributed-logs/query-service:${IMAGE_TAG}
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: app-secrets, key: DATABASE_URL }
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef: { name: app-secrets, key: ANTHROPIC_API_KEY }
+          envFrom:
+            - configMapRef: { name: app-config }
+          # query-service exposes routes under /api/v1; use a TCP probe since
+          # there is no dedicated /health endpoint.
+          readinessProbe:
+            tcpSocket: { port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+---
+# Internet-facing entrypoint. EKS provisions an AWS NLB for this Service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: query-service
+  namespace: distributed-logs
+    # Uses the in-tree cloud provider (no extra controller needed). "nlb"
+    # provisions a Network Load Balancer; drop this line for a classic ELB.
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+spec:
+  selector: { app: query-service }
+  ports:
+    - port: 80
+      targetPort: 8080
+      name: http
+  type: LoadBalancer

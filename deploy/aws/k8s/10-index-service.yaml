@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: index-service
+  namespace: distributed-logs
+  labels: { app: index-service }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: index-service }
+  template:
+    metadata:
+      labels: { app: index-service }
+    spec:
+      serviceAccountName: index-service
+      containers:
+        - name: index-service
+          image: ${ECR_REGISTRY}/distributed-logs/index-service:${IMAGE_TAG}
+          ports:
+            - containerPort: 50051
+              name: grpc
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: app-secrets, key: DATABASE_URL }
+          envFrom:
+            - configMapRef: { name: app-config }
+          readinessProbe:
+            grpc: { port: 50051 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            grpc: { port: 50051 }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: index-service
+  namespace: distributed-logs
+spec:
+  selector: { app: index-service }
+  ports:
+    - port: 50051
+      targetPort: 50051
+      name: grpc
+  type: ClusterIP

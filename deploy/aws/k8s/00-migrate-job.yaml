@@ -1,0 +1,37 @@
+# One-shot DB migration: applies migrations/*.sql against RDS before the
+# services roll out. The SQL is supplied via the `migrations` ConfigMap that
+# deploy.sh generates from ./migrations.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  namespace: distributed-logs
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: postgres:16
+          command:
+            - bash
+            - -c
+            - |
+              set -e
+              for f in $(ls /migrations/*.sql | sort); do
+                echo "applying $f"
+                psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+              done
+              echo "migrations complete"
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: app-secrets, key: DATABASE_URL }
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+      volumes:
+        - name: migrations
+          configMap:
+            name: migrations
