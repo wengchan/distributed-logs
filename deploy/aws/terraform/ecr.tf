@@ -1,5 +1,5 @@
 locals {
-  services = ["index-service", "log-client", "query-service", "summarize-service"]
+  services = ["index-service", "log-client", "query-service", "summarize-service", "monitor-service"]
 }
 
 resource "aws_ecr_repository" "services" {

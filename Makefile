@@ -17,6 +17,7 @@ help:
 	@echo "  run-server  Start the index-service  (gRPC :50051)"
 	@echo "  run-client  Tail ./testlogs and push to index-service"
 	@echo "  run-query   Start the query-service  (HTTP :8080)"
+	@echo "  run-monitor Start the AI monitor-service (HTTP :8082)"
 	@echo "  build       Compile all binaries to ./bin/"
 	@echo "  clean       Remove ./bin/"
 	@echo ""
@@ -63,6 +64,10 @@ run-summarize:
 run-query:
 	DATABASE_URL="$(DB_URL)" ANTHROPIC_API_KEY="$(ANTHROPIC_API_KEY)" go run ./cmd/query-service
 
+run-monitor:
+	DATABASE_URL="$(DB_URL)" ANTHROPIC_API_KEY="$(ANTHROPIC_API_KEY)" \
+	MONITOR_INTERVAL=30s go run ./cmd/monitor-service
+
 # ── Build ─────────────────────────────────────────────────────────────────────
 
 build:
@@ -71,6 +76,7 @@ build:
 	go build -o bin/log-client       ./cmd/log-client
 	go build -o bin/query-service    ./cmd/query-service
 	go build -o bin/summarize-service ./cmd/summarize-service
+	go build -o bin/monitor-service  ./cmd/monitor-service
 
 clean:
 	rm -rf bin/

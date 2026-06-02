@@ -75,7 +75,7 @@ kubectl -n distributed-logs wait --for=condition=complete job/db-migrate --timeo
 
 # ── 6. services ──────────────────────────────────────────────────────────────
 echo "==> deploying services"
-for f in 10-index-service 11-summarize-service 12-query-service 13-log-client; do
+for f in 10-index-service 11-summarize-service 12-query-service 13-log-client 14-monitor-service; do
   envsubst < "$K8S_DIR/$f.yaml" | kubectl apply -f -
 done
 

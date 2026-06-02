@@ -5,6 +5,7 @@ Deploys the distributed-logs stack to AWS:
 | Component          | AWS service              | Notes                                            |
 | ------------------ | ------------------------ | ------------------------------------------------ |
 | Container runtime  | **EKS** (managed K8s)    | 2× `t3.medium` nodes in private subnets          |
+| AI monitoring      | **monitor-service**      | Agentic tool-use loop over the logs, reports via HTTP |
 | Index database     | **RDS** Postgres 16      | Multi-AZ for HA, in private subnets              |
 | Raw-log archive    | **S3**                   | Versioned, encrypted, tiers to Glacier @ 90d     |
 | Image registry     | **ECR**                  | One repo per service, scan-on-push               |
@@ -38,7 +39,7 @@ deploy/aws/
 ├── k8s/                    # manifests (envsubst placeholders filled by deploy.sh)
 │   ├── namespace.yaml  01-serviceaccount.yaml  02-config.yaml
 │   ├── 00-migrate-job.yaml
-│   └── 10-index 11-summarize 12-query 13-log-client
+│   └── 10-index 11-summarize 12-query 13-log-client 14-monitor
 └── scripts/
     ├── build-and-push.sh   # build all images → ECR
     ├── deploy.sh           # full provision + deploy

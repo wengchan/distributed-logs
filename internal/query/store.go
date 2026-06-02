@@ -104,6 +104,18 @@ func (s *Store) Count(ctx context.Context, p Params) (int64, error) {
 	return n, nil
 }
 
+// MaxID returns the largest log id currently stored, or 0 if the table is
+// empty. The monitor uses it as a cursor so it only analyzes newly-ingested
+// logs on each tick.
+func (s *Store) MaxID(ctx context.Context) (int64, error) {
+	var id int64
+	// COALESCE so an empty table yields 0 rather than NULL.
+	if err := s.pool.QueryRow(ctx, "SELECT COALESCE(MAX(id), 0) FROM logs").Scan(&id); err != nil {
+		return 0, fmt.Errorf("max id: %w", err)
+	}
+	return id, nil
+}
+
 // buildWhere constructs the WHERE clause and positional args from Params.
 func buildWhere(p Params) (string, []any) {
 	var conds []string

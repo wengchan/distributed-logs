@@ -1,6 +1,6 @@
 # Distributed Logs
 
-Distributed Logs is a distributed log collection and query platform built in Go that helps engineering teams centralize logs from remote machines, investigate incidents faster, and scale log analytics more efficiently. By combining gRPC-based ingestion, fast REST querying, and AI-powered summarization, the system improves observability, reduces manual debugging effort, and supports cost-effective operations in distributed environments.
+Distributed Logs is a distributed log collection and query platform built in Go that helps engineering teams centralize logs from remote machines, investigate incidents faster, and scale log analytics more efficiently. By combining gRPC-based ingestion, fast REST querying, AI-powered summarization, and an autonomous AI monitoring agent, the system improves observability, reduces manual debugging effort, and supports cost-effective operations in distributed environments.
 
 ## Architecture
 
@@ -21,17 +21,26 @@ Distributed Logs is a distributed log collection and query platform built in Go 
                                                  │
                                            SELECT queries
                                                  │
-                                        ┌────────┴────────┐
-                                        │  Query Service  │
-                                        │  (HTTP :8080)   │
-                                        └────────┬────────┘
-                                                 │
-                                         Claude Opus 4.6
-                                        ┌────────▼────────┐
-                                        │  Anthropic API  │
-                                        │  (summarize)    │
-                                        └─────────────────┘
+                              SELECT queries        SELECT queries (tools)
+                                    │                        │
+                          ┌─────────┴───────┐      ┌─────────┴────────┐
+                          │  Query Service  │      │ Monitor Service  │
+                          │  (HTTP :8080)   │      │  (HTTP :8082)    │
+                          └─────────┬───────┘      └─────────┬────────┘
+                                    │                        │
+                            Claude Opus 4.6          tool-use harness loop
+                                    │              (query_logs/count_logs/…)
+                                    │                        │
+                          ┌─────────▼────────────────────────▼─────────┐
+                          │                Anthropic API                │
+                          │   summarize (one-shot)  │  monitor (agent)  │
+                          └─────────────────────────────────────────────┘
 ```
+
+The **Query Service** makes a single summarization call. The **Monitor Service**
+runs a true *agent*: a harness loop that hands Claude a set of tools, lets it
+decide which to call, executes them against the log store, feeds the results
+back, and repeats until the model produces a severity-tagged incident report.
 
 ## Components
 
@@ -40,6 +49,7 @@ Distributed Logs is a distributed log collection and query platform built in Go 
 | **Index Service** | `cmd/index-service/` | gRPC server. Receives log lines from clients, parses them, stores in Postgres |
 | **Log Client** | `cmd/log-client/` | Polls a directory for log files, tails new lines, pushes to index service |
 | **Query Service** | `cmd/query-service/` | REST API for searching, counting, and AI-summarizing stored logs |
+| **Monitor Service** | `cmd/monitor-service/` | AI agent that watches the log store in real time via a tool-use harness and emits severity-tagged reports |
 
 ## Prerequisites
 
@@ -76,6 +86,10 @@ make run-query
 
 # Tab 3 — log client (tails ./testlogs)
 make run-client
+
+# Tab 4 (optional) — AI monitoring agent (HTTP :8082)
+export ANTHROPIC_API_KEY=sk-ant-api03-...
+make run-monitor
 ```
 
 ## Makefile Reference
@@ -89,6 +103,7 @@ make db-migrate    # Run SQL migrations
 make db-reset      # Drop + recreate database and re-run migrations
 make run-server    # Start index-service on :50051
 make run-query     # Start query-service on :8080
+make run-monitor   # Start AI monitor-service on :8082
 make run-client    # Start log client (tails ./testlogs)
 make build         # Compile all binaries to ./bin/
 make clean         # Remove ./bin/
@@ -209,6 +224,85 @@ Status values: `pending` → `running` → `done` | `error`
 
 ---
 
+## AI Monitoring Agent
+
+The **monitor-service** (HTTP `:8082`) is an autonomous agent that watches the
+log store. Unlike `/summarize` — a single LLM call over a fixed batch — the
+monitor runs an **agentic harness**: on each tick it gives Claude the window of
+newly-ingested logs plus a toolbox, and lets the model investigate on its own.
+
+**The harness loop** (`internal/agent/agent.go`):
+
+```
+observe new logs ─▶ ask Claude (with tools)
+                         │
+        ┌────────────────┴─ stop_reason == tool_use? ──── no ──▶ final report
+        │ yes
+        ▼
+   run requested tools ─▶ feed results back ─▶ (loop, capped at 8 steps)
+```
+
+**Tools the agent can call** (`internal/agent/tools.go`):
+
+| Tool | Purpose |
+|------|---------|
+| `level_breakdown` | Counts per severity — situational overview |
+| `count_logs` | Measure the scope of a problem cheaply |
+| `query_logs` | Pull concrete log lines as evidence |
+
+The system prompt is prompt-cached, so every tick after the first reuses the
+cached prefix. Reports are kept in an in-memory ring buffer.
+
+Config (env): `MONITOR_INTERVAL` (default `30s`), `MONITOR_BOOTSTRAP` (logs the
+first tick looks back over, default `100`), `MONITOR_MODEL`, `DATABASE_URL`,
+`ANTHROPIC_API_KEY`.
+
+### GET /status
+
+Snapshot of the monitor: last run, cursor (highest log id analyzed), interval,
+number of reports kept, latest severity.
+
+```bash
+curl "localhost:8082/status"
+```
+
+### GET /reports  ·  GET /reports/latest
+
+The kept reports (newest first), or just the most recent. Each report includes
+the parsed `severity`, `headline`, the full `report` text, and `tool_calls` —
+the transcript of how the agent reached its conclusion.
+
+```bash
+curl "localhost:8082/reports/latest"
+```
+
+```json
+{
+  "severity": "warning",
+  "headline": "3 DB connection errors on machine-001",
+  "report": "SEVERITY: warning\nHEADLINE: ...\nFINDINGS:\n- ...",
+  "tool_calls": [
+    {"name": "level_breakdown", "input": "{}", "result": "ERROR 3\nWARN 1\n..."},
+    {"name": "query_logs", "input": "{\"level\":\"ERROR\"}", "result": "#2 [..] ERROR ..."}
+  ],
+  "steps": 3,
+  "duration": "4.2s"
+}
+```
+
+### POST /analyze
+
+Ask the agent an ad-hoc question; it investigates with its tools and returns a
+report synchronously.
+
+```bash
+curl -X POST "localhost:8082/analyze" \
+  -H 'Content-Type: application/json' \
+  -d '{"question": "Are there any error spikes on machine-001?"}'
+```
+
+---
+
 ## gRPC API
 
 Defined in `proto/indexservice/index_service.proto`.
@@ -267,7 +361,8 @@ Stores parsed log entries. Partitioned by `start_time` (monthly).
 docker compose up --build
 ```
 
-Starts: PostgreSQL primary + replica, index-service, log-client.
+Starts: PostgreSQL primary + replica, index-service, log-client, and the
+AI monitor-service (set `ANTHROPIC_API_KEY` in your environment first).
 
 ## Kubernetes
 
@@ -287,11 +382,13 @@ Requires a `postgres-secret` with `password` and `database_url` keys.
 ├── cmd/
 │   ├── index-service/    # gRPC server entrypoint
 │   ├── log-client/       # Log tail + push client
-│   └── query-service/    # HTTP query API entrypoint
+│   ├── query-service/    # HTTP query API entrypoint
+│   └── monitor-service/  # AI monitoring agent entrypoint
 ├── internal/
 │   ├── db/               # Postgres connection pool and queries
 │   ├── logparse/         # Log line parser (level, timestamp, message)
 │   ├── query/            # HTTP handlers, DB queries, LLM summarizer
+│   ├── agent/            # AI monitoring agent: tools, harness loop, monitor
 │   └── server/           # gRPC handler implementations
 ├── migrations/           # SQL schema migrations
 ├── models/               # Shared Go structs (Offset, Log)

@@ -15,7 +15,7 @@ IMAGE_TAG="${1:-$(git -C "$REPO_ROOT" rev-parse --short HEAD)}"
 AWS_REGION="${AWS_REGION:-$(terraform -chdir="$TF_DIR" output -raw aws_region)}"
 ECR_REGISTRY="${ECR_REGISTRY:-$(terraform -chdir="$TF_DIR" output -raw ecr_registry)}"
 
-SERVICES=(index-service log-client query-service summarize-service)
+SERVICES=(index-service log-client query-service summarize-service monitor-service)
 
 echo "==> Logging in to ECR ($ECR_REGISTRY)"
 aws ecr get-login-password --region "$AWS_REGION" \

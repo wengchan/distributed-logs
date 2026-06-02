@@ -67,6 +67,25 @@ services:
       - index-service
     command: ["-server", "index-service:50051", "-path", "/logs", "-interval", "10s"]
 
+  # ── AI Monitoring Agent ───────────────────────────────────────────────────
+  monitor-service:
+    build:
+      context: .
+      dockerfile: deploy/aws/Dockerfile
+      args:
+        SERVICE: monitor-service
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/logs?sslmode=disable
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      MONITOR_INTERVAL: 60s
+      MONITOR_BOOTSTRAP: "100"
+      HTTP_ADDR: ":8082"
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   pgdata:
   pgreplicadata:

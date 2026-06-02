@@ -1,0 +1,63 @@
+# AI monitoring agent. Runs a tool-use harness on an interval against the log
+# store and serves severity-tagged reports over HTTP.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: monitor-service
+  namespace: distributed-logs
+  labels: { app: monitor-service }
+spec:
+  # Single replica: the monitor holds an in-memory cursor + report buffer, so
+  # running one instance avoids duplicate analysis of the same window.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: monitor-service }
+  template:
+    metadata:
+      labels: { app: monitor-service }
+    spec:
+      containers:
+        - name: monitor-service
+          image: ${ECR_REGISTRY}/distributed-logs/monitor-service:${IMAGE_TAG}
+          ports:
+            - containerPort: 8082
+              name: http
+          env:
+            - name: HTTP_ADDR
+              value: ":8082"
+            - name: MONITOR_INTERVAL
+              value: "60s"
+            - name: MONITOR_BOOTSTRAP
+              value: "100"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: app-secrets, key: DATABASE_URL }
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef: { name: app-secrets, key: ANTHROPIC_API_KEY }
+          readinessProbe:
+            httpGet: { path: /health, port: 8082 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: 8082 }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: monitor-service
+  namespace: distributed-logs
+spec:
+  selector: { app: monitor-service }
+  ports:
+    - port: 8082
+      targetPort: 8082
+      name: http
+  type: ClusterIP
